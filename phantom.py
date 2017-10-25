@@ -13,7 +13,7 @@ import argparse
 import operator
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
-from xvfbwrapper import Xvfb
+#from xvfbwrapper import Xvfb
 
 parser = argparse.ArgumentParser(description='Add a domain to scan')
 parser.add_argument('-d', '--domain', help='domain to scan')
@@ -26,24 +26,24 @@ service_args = [
 class BrowserSession(object):
     """Creates a new selenium + proxy session"""
     def __init__(self):
-	self.vdisplay = Xvfb()
-	self.vdisplay.start()
-        self.server = Server("/home/pablo/code/ajax/browsermob-proxy-2.1.4/bin/browsermob-proxy")
+        #self.vdisplay = Xvfb()
+        #self.vdisplay.start()
+        self.server = Server("browsermob-proxy")
         self.server.start()
         self.proxy = self.server.create_proxy()
-	self.proxy_address = "--proxy=127.0.0.1:%s" % self.proxy.port
-	self.service_args = [ self.proxy_address, '--ignore-ssl-errors=yes', ] 
+        self.proxy_address = "--proxy=127.0.0.1:%s" % self.proxy.port
+        self.service_args = [ self.proxy_address, '--ignore-ssl-errors=yes', ] 
         self.driver = webdriver.PhantomJS(service_args=self.service_args)
-	self.driver.set_window_size(1120, 550)
+        self.driver.set_window_size(1120, 550)
         #self.driver = webdriver.Chrome(chrome_options=self.profile)
         self.options = {"captureHeaders": True}
         self.proxy.new_har("fox",self.options)
 
     def close(self):
         self.driver.quit()
-	self.proxy.close()
+        self.proxy.close()
         self.server.stop()
-	self.vdisplay.stop()
+        #self.vdisplay.stop()
 
     def clickOn(self, csstag):
         try:
