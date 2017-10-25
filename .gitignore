@@ -1,0 +1,9 @@
+*.log
+*.pyc
+./bmp.log
+./geckodriver.log
+./server.log
+./test.har
+./top-1m.csv
+./top1000
+
