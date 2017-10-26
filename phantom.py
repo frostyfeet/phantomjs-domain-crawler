@@ -1,5 +1,7 @@
 """module needed to perform whois queries"""
 import pythonwhois
+import sys
+import os
 from browsermobproxy import Server
 from selenium import webdriver
 import selenium.webdriver.support.ui as ui
@@ -11,39 +13,33 @@ import json
 import time
 import argparse
 import operator
+import pprint
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
 #from xvfbwrapper import Xvfb
 
-parser = argparse.ArgumentParser(description='Add a domain to scan')
-parser.add_argument('-d', '--domain', help='domain to scan')
+parser = argparse.ArgumentParser(description='Add a file to scan')
+parser.add_argument('-r', '--read', help='file with domains')
 
-service_args = [
-    '--proxy=127.0.0.1:8080',
-    '--proxy-type=https',
-    ]
+server = Server("/Users/p/Downloads/browsermob-proxy-2.1.4/bin/browsermob-proxy")
+server.start()
+proxy = server.create_proxy()
+options = {"captureHeaders": True}
+proxy.new_har("fox",options)
 
 class BrowserSession(object):
     """Creates a new selenium + proxy session"""
     def __init__(self):
         #self.vdisplay = Xvfb()
         #self.vdisplay.start()
-        self.server = Server("browsermob-proxy")
-        self.server.start()
-        self.proxy = self.server.create_proxy()
-        self.proxy_address = "--proxy=127.0.0.1:%s" % self.proxy.port
+        self.proxy_address = "--proxy=127.0.0.1:%s" % proxy.port
         self.service_args = [ self.proxy_address, '--ignore-ssl-errors=yes', ] 
         self.driver = webdriver.PhantomJS(service_args=self.service_args)
         self.driver.set_window_size(1120, 550)
         #self.driver = webdriver.Chrome(chrome_options=self.profile)
-        self.options = {"captureHeaders": True}
-        self.proxy.new_har("fox",self.options)
-
+        
     def close(self):
         self.driver.quit()
-        self.proxy.close()
-        self.server.stop()
-        #self.vdisplay.stop()
 
     def clickOn(self, csstag):
         try:
@@ -62,7 +58,7 @@ class BrowserSession(object):
             val = URLValidator
             val (url)
             self.driver.get(url)
-            data = self.proxy.har
+            data = proxy.har
             fw = open('test.har', 'w')
             fw.write(json.dumps(data))
         except ValidationError, e:
@@ -106,31 +102,47 @@ class Domain(object):
         except:
             return None
 
-def readData():
+def readData(domain):
+    print ("Getting URLs for: " + domain)
     f = open ('test.har', 'r')
     try: 
         x = json.loads(f.read())
         urls = set()
-        for i in x['log']['entries']:
-            parsed_uri = urlparse(i['request']['url'])
-            tld = tldextract.extract(parsed_uri.netloc)
-            urls.add(tld.domain + '.' + tld.suffix)
+        for i in range(len(x['log']['entries'])):
+            for j in range(len(x['log']['entries'][i]['request']['headers'])):
+                if str(x['log']['entries'][i]['request']['headers'][j]['name']) == 'Referer':
+                    tld_ref = tldextract.extract(urlparse(x['log']['entries'][i]['request']['headers'][j]['value']).netloc)
+                    referer = tld_ref.domain + '.' + tld_ref.suffix
+                    if (domain == referer):
+                        parsed_uri = urlparse(x['log']['entries'][i]['request']['url'])
+                        tld = tldextract.extract(parsed_uri.netloc)
+                        urls.add(tld.domain + '.' + tld.suffix)
         return sorted(urls)
     finally:
         f.close()
 
-args = parser.parse_args()
-print ("Starting with " + args.domain)
-b = BrowserSession()
-print "start browsing"
-b.browse("http://" + args.domain)
-print "browsing finished"
-b.close()
-x = readData()
-for i in x:
-    print "reading data"
-    print i
-    d = Domain(i)
-    d.query()
-    if not d.exists():
-        print (args.domain + " - " + i + " doesn't exist")
+def main(argv):
+    args = parser.parse_args()
+    print ("Reading file: " + args.read)
+    with open (args.read, 'r') as f:
+        for line in f:
+            b = BrowserSession()
+            print "start browsing"
+            b.browse("http://" + line.strip())
+            print "browsing finished"
+            b.close()
+    with open (args.read, 'r') as f:
+        for line in f:
+            x = readData(line.strip())
+            for i in x:
+                d = Domain(i)
+                d.query()
+                if not d.exists():
+                    print (line.strip() + " - " + i + " - Domain not registered")
+                else:
+                    print (line.strip() + " - " + i )
+
+if __name__ == "__main__":
+    main(sys.argv)
+
+os.system('kill -9 $(ps -e | grep browsermob | awk "{print $1}") ')
